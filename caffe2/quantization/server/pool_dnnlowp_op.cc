@@ -1,11 +1,15 @@
 #include "caffe2/operators/pool_op.h"
-#include "caffe2_dnnlowp_utils.h"
-#include "conv_pool_dnnlowp_op_base.h"
-#include "op_wrapper.h"
+
+#include "caffe2/quantization/server/caffe2_dnnlowp_utils.h"
+#include "caffe2/quantization/server/conv_pool_dnnlowp_op_base.h"
+#include "caffe2/quantization/server/op_wrapper.h"
+#include "caffe2/utils/eigen_utils.h"
 
 namespace caffe2 {
 
 using namespace std;
+
+namespace {
 
 template <typename T>
 class AveragePool {
@@ -55,9 +59,8 @@ class MaxPool {
   static void finalize(const int /*size*/, T& /*y_data*/) {}
 };
 
-namespace {
-
-using AveragePoolFp32Op = PoolOp<float, CPUContext, AveragePool<float>>;
+using AveragePoolFp32Op =
+    PoolOp<float, CPUContext, AveragePoolFunctor<CPUContext>>;
 
 template <typename T>
 class AveragePoolDnnLowPOp final
@@ -97,8 +100,8 @@ class AveragePoolDnnLowPOp final
     GetOutputQuantizationParams_();
 
     auto& X = InputTensorCPU_(0);
-    auto* Y = OutputTensorCPU_(0);
-    ConvPoolOpBase<CPUContext>::SetOutputSize(X, Y, X.dim32(1));
+    auto sizes = ConvPoolOpBase<CPUContext>::GetOutputSize(X, X.dim32(1));
+    auto* Y = OutputTensorCPU_(0, sizes, at::dtype<T>());
 
     T* Ydata = GetQuantizedOutputData_();
 
@@ -235,9 +238,9 @@ class AveragePoolDnnLowPOp final
     GetOutputQuantizationParams_();
 
     auto& X = InputTensorCPU_(0);
-    auto* Y = OutputTensorCPU_(0);
     int channels = X.dim32(X.ndim() - 1);
-    ConvPoolOpBase<CPUContext>::SetOutputSize(X, Y, channels);
+    auto sizes = ConvPoolOpBase<CPUContext>::GetOutputSize(X, channels);
+    auto* Y = OutputTensorCPU_(0, sizes, at::dtype<T>());
 
     T* Ydata = GetQuantizedOutputData_();
 
@@ -353,7 +356,7 @@ class AveragePoolDnnLowPOp final
   }
 }; // class AveragePoolDnnLowPOp
 
-using MaxPoolFp32Op = PoolOp<float, CPUContext, MaxPool<float>>;
+using MaxPoolFp32Op = PoolOp<float, CPUContext, MaxPoolFunctor<CPUContext>>;
 
 template <typename T>
 class MaxPoolDnnLowPOp final : public ConvPoolDNNLowPOpBase<T, MaxPoolFp32Op> {
@@ -394,8 +397,8 @@ class MaxPoolDnnLowPOp final : public ConvPoolDNNLowPOpBase<T, MaxPoolFp32Op> {
     const T* Xdata = QuantizeInputIfNeeded(this, 0, in_qparams_[0], X_temp);
 
     auto& X = InputTensorCPU_(0);
-    auto* Y = OutputTensorCPU_(0);
-    ConvPoolOpBase<CPUContext>::SetOutputSize(X, Y, X.dim32(1));
+    auto sizes = ConvPoolOpBase<CPUContext>::GetOutputSize(X, X.dim32(1));
+    auto* Y = OutputTensorCPU_(0, sizes, at::dtype<T>());
 
     T* Ydata = GetQuantizedOutputData_();
 
@@ -540,9 +543,9 @@ class MaxPoolDnnLowPOp final : public ConvPoolDNNLowPOpBase<T, MaxPoolFp32Op> {
     const T* Xdata = QuantizeInputIfNeeded(this, 0, in_qparams_[0], X_temp);
 
     auto& X = InputTensorCPU_(0);
-    auto* Y = OutputTensorCPU_(0);
     int channels = X.dim32(X.ndim() - 1);
-    ConvPoolOpBase<CPUContext>::SetOutputSize(X, Y, channels);
+    auto sizes = ConvPoolOpBase<CPUContext>::GetOutputSize(X, channels);
+    auto* Y = OutputTensorCPU_(0, sizes, at::dtype<T>());
 
     T* Ydata = GetQuantizedOutputData_();
 

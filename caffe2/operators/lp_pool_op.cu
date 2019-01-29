@@ -6,7 +6,9 @@
 
 namespace caffe2 {
 namespace {
-class LpPool {};
+struct LpPoolFunctor {
+  explicit LpPoolFunctor(const OperatorBase& /* op */) {}
+};
 } // namespace
 
 namespace {
@@ -211,10 +213,11 @@ __global__ void LpPoolBackwardNHWC(
 } // namespace
 
 template <>
-bool PoolOp<float, CUDAContext, LpPool>::RunOnDeviceWithOrderNCHW() {
+bool PoolOp<float, CUDAContext, LpPoolFunctor>::RunOnDeviceWithOrderNCHW() {
   auto& X = Input(0);
-  auto* Y = Output(0);
-  ConvPoolOpBase<CUDAContext>::SetOutputSize(X, Y, X.dim32(1));
+  auto sizes = ConvPoolOpBase<CUDAContext>::GetOutputSize(X, X.dim32(1));
+  auto* Y = Output(0, sizes, at::dtype<float>());
+
   int output_size = Y->size();
   LpPoolForwardNCHW<float>
       <<<CAFFE_GET_BLOCKS(output_size),
@@ -241,10 +244,11 @@ bool PoolOp<float, CUDAContext, LpPool>::RunOnDeviceWithOrderNCHW() {
 }
 
 template <>
-bool PoolOp<float, CUDAContext, LpPool>::RunOnDeviceWithOrderNHWC() {
+bool PoolOp<float, CUDAContext, LpPoolFunctor>::RunOnDeviceWithOrderNHWC() {
   auto& X = Input(0);
-  auto* Y = Output(0);
-  ConvPoolOpBase<CUDAContext>::SetOutputSize(X, Y, X.dim32(3));
+  auto sizes = ConvPoolOpBase<CUDAContext>::GetOutputSize(X, X.dim32(3));
+  auto* Y = Output(0, sizes, at::dtype<float>());
+
   int output_size = Y->size();
   LpPoolForwardNHWC<float>
       <<<CAFFE_GET_BLOCKS(output_size),
@@ -271,14 +275,14 @@ bool PoolOp<float, CUDAContext, LpPool>::RunOnDeviceWithOrderNHWC() {
 }
 
 template <>
-bool PoolGradientOp<float, CUDAContext, LpPool>::
+bool PoolGradientOp<float, CUDAContext, LpPoolFunctor>::
     RunOnDeviceWithOrderNCHW() {
   auto& X = Input(0);
   auto& Y = Input(1);
   auto& dY = Input(2);
   CAFFE_ENFORCE_EQ(dY.ndim(), 4);
-  auto* dX = Output(0);
-  dX->ResizeLike(X);
+
+  auto* dX = Output(0, X.sizes(), at::dtype<float>());
   ConvPoolOpBase<CUDAContext>::ComputePads({X.dim32(2), X.dim32(3)});
   LpPoolBackwardNCHW<float>
       <<<CAFFE_GET_BLOCKS(X.size()),
@@ -307,14 +311,14 @@ bool PoolGradientOp<float, CUDAContext, LpPool>::
 }
 
 template <>
-bool PoolGradientOp<float, CUDAContext, LpPool>::
+bool PoolGradientOp<float, CUDAContext, LpPoolFunctor>::
     RunOnDeviceWithOrderNHWC() {
   auto& X = Input(0);
   auto& Y = Input(1);
   auto& dY = Input(2);
   CAFFE_ENFORCE_EQ(dY.ndim(), 4);
-  auto* dX = Output(0);
-  dX->ResizeLike(X);
+
+  auto* dX = Output(0, X.sizes(), at::dtype<float>());
   ConvPoolOpBase<CUDAContext>::ComputePads({X.dim32(1), X.dim32(2)});
   LpPoolBackwardNHWC<float>
       <<<CAFFE_GET_BLOCKS(X.size()),
@@ -342,8 +346,8 @@ bool PoolGradientOp<float, CUDAContext, LpPool>::
   return true;
 }
 
-REGISTER_CUDA_OPERATOR(LpPool, PoolOp<float, CUDAContext, LpPool>);
+REGISTER_CUDA_OPERATOR(LpPool, PoolOp<float, CUDAContext, LpPoolFunctor>);
 REGISTER_CUDA_OPERATOR(
     LpPoolGradient,
-    PoolGradientOp<float, CUDAContext, LpPool>);
+    PoolGradientOp<float, CUDAContext, LpPoolFunctor>);
 }

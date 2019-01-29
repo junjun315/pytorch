@@ -56,7 +56,8 @@ class Int8ConvTransposeOp final : public ConvTransposeUnpoolBase<CPUContext> {
     const auto KW = W.t.size(2);
     const auto OC = W.t.size(3);
 
-    ConvTransposeUnpoolBase<CPUContext>::SetOutputSize(X.t, &(Y->t), OC);
+    auto sizes = ConvTransposeUnpoolBase<CPUContext>::GetOutputSize(X.t, OC);
+    ReinitializeTensor(&(Y->t), sizes, at::dtype<uint8_t>().device(CPU));
     CHECK_EQ(OC, Y->t.size(3));
 
     runWithSharedBuffer<CPUContext>(ws_, [&](Tensor* buffer) {
@@ -92,6 +93,7 @@ class Int8ConvTransposeOp final : public ConvTransposeUnpoolBase<CPUContext> {
             Y->scale,
             std::numeric_limits<uint8_t>::min(),
             std::numeric_limits<uint8_t>::max(),
+            0 /* flags */,
             &this->qnnpackObject_);
         CAFFE_ENFORCE(
             createStatus == qnnp_status_success,
